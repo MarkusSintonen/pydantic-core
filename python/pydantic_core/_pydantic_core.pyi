@@ -34,6 +34,13 @@ __all__ = [
     'list_all_errors',
     'TzInfo',
     'validate_core_schema',
+    'collect_definitions',
+    'collect_ref_names',
+    'collect_invalid_schemas',
+    'apply_discriminators',
+    'simplify_schema_references',
+    'collect_refs',
+    'flatten_refs',
 ]
 __version__: str
 build_profile: str
@@ -1163,3 +1170,11 @@ def validate_core_schema(schema: CoreSchema, *, strict: bool | None = None) -> C
     We may also remove this function altogether, do not rely on it being present if you are
     using pydantic-core directly.
     """
+
+def collect_definitions(schema: dict) -> dict[str, dict]: ...
+def collect_ref_names(schema: dict) -> set[str]: ...
+def collect_invalid_schemas(schema: dict) -> list[dict]: ...
+def apply_discriminators(schema: dict, apply_callback: Callable[[dict, str], dict]) -> None: ...
+def simplify_schema_references(schema: dict, inline: bool) -> dict: ...
+def collect_refs(schema: dict) -> dict: ...
+def flatten_refs(schema: dict, all_defs: dict) -> dict: ...

@@ -26,6 +26,13 @@ from ._pydantic_core import (
     to_json,
     to_jsonable_python,
     validate_core_schema,
+    collect_definitions,
+    collect_ref_names,
+    collect_invalid_schemas,
+    apply_discriminators,
+    simplify_schema_references,
+    collect_refs,
+    flatten_refs,
 )
 from .core_schema import CoreConfig, CoreSchema, CoreSchemaType, ErrorType
 
@@ -67,6 +74,13 @@ __all__ = [
     'from_json',
     'to_jsonable_python',
     'validate_core_schema',
+    'collect_definitions',
+    'collect_ref_names',
+    'collect_invalid_schemas',
+    'apply_discriminators',
+    'simplify_schema_references',
+    'collect_refs',
+    'flatten_refs',
 ]
 
 

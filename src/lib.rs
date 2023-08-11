@@ -26,6 +26,7 @@ mod serializers;
 mod tools;
 mod url;
 mod validators;
+mod core_schema_utils;
 
 // required for benchmarks
 pub use self::input::TzInfo;
@@ -40,6 +41,7 @@ pub use serializers::{
     WarningsArg,
 };
 pub use validators::{validate_core_schema, PySome, SchemaValidator};
+use crate::core_schema_utils::*;
 
 use crate::input::Input;
 
@@ -133,6 +135,17 @@ fn _pydantic_core(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(from_json, m)?)?;
     m.add_function(wrap_pyfunction!(to_jsonable_python, m)?)?;
     m.add_function(wrap_pyfunction!(list_all_errors, m)?)?;
+
     m.add_function(wrap_pyfunction!(validate_core_schema, m)?)?;
+
+    m.add_function(wrap_pyfunction!(collect_definitions, m)?)?;
+    m.add_function(wrap_pyfunction!(collect_ref_names, m)?)?;
+    m.add_function(wrap_pyfunction!(collect_invalid_schemas, m)?)?;
+    m.add_function(wrap_pyfunction!(apply_discriminators, m)?)?;
+    m.add_function(wrap_pyfunction!(simplify_schema_references, m)?)?;
+
+    m.add_function(wrap_pyfunction!(collect_refs, m)?)?;
+    m.add_function(wrap_pyfunction!(flatten_refs, m)?)?;
+
     Ok(())
 }
