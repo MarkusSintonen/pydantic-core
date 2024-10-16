@@ -19,7 +19,7 @@ pub trait SchemaDict<'py> {
     where
         T: FromPyObject<'py>;
 
-    fn pop<T>(&'py self, key: &PyString) -> PyResult<T>
+    fn pop<T>(&self, key: &Bound<'_, PyString>) -> PyResult<T>
     where
         T: FromPyObject<'py>;
 }
@@ -72,18 +72,18 @@ impl<'py> SchemaDict<'py> for Option<&Bound<'py, PyDict>> {
         T: FromPyObject<'py>,
     {
         match self {
-            Some(d) => d.get_as_req(key),
+            Some(d) => d.extract::<Bound<'_, PyDict>>()?.get_as_req(key),
             None => py_err!(PyKeyError; "{}", key),
         }
     }
 
-    #[cfg_attr(has_no_coverage, no_coverage)]
+    #[cfg_attr(has_coverage_attribute, coverage(off))]
     fn pop<T>(&self, key: &Bound<'_, PyString>) -> PyResult<T>
     where
         T: FromPyObject<'py>,
     {
         match self {
-            Some(d) => d.pop(key),
+            Some(d) => d.extract::<Bound<'_, PyDict>>()?.pop(key),
             None => py_err!(PyKeyError; "{}", key),
         }
     }
