@@ -212,7 +212,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: pydantic/pydantic
+          repository: MarkusSintonen/pydantic  # TODO remove before merging
+          ref: optimized-schema-building
           path: pydantic
 
       - uses: actions/checkout@v4
