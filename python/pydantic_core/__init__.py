@@ -23,11 +23,12 @@ from ._pydantic_core import (
     ValidationError,
     __version__,
     from_json,
+    gather_schemas_for_cleaning,
     to_json,
     to_jsonable_python,
     validate_core_schema,
 )
-from .core_schema import CoreConfig, CoreSchema, CoreSchemaType, ErrorType
+from .core_schema import CoreConfig, CoreSchema, CoreSchemaType, DefinitionReferenceSchema, ErrorType
 
 if _sys.version_info < (3, 11):
     from typing_extensions import NotRequired as _NotRequired
@@ -67,6 +68,7 @@ __all__ = [
     'from_json',
     'to_jsonable_python',
     'validate_core_schema',
+    'gather_schemas_for_cleaning',
 ]
 
 
@@ -137,3 +139,11 @@ class MultiHostHost(_TypedDict):
     """The host part of this host, or `None`."""
     port: int | None
     """The port part of this host, or `None`."""
+
+
+class GatherResult(_TypedDict):
+    """Internal result of gathering schemas for cleaning."""
+
+    definition_refs: dict[str, list[DefinitionReferenceSchema]]
+    recursive_refs: set[str]
+    deferred_discriminators: list[tuple[CoreSchema, _Any]]
