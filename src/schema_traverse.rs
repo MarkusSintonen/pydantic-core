@@ -24,7 +24,7 @@ macro_rules! traverse_key_fn {
 macro_rules! traverse {
     ($($key:expr => $func:expr),*; $dict: expr, $ctx: expr) => {{
         $(traverse_key_fn!($key, $func, $dict, $ctx);)*
-        traverse_key_fn!("serialization", gather_serialization, $dict, $ctx);
+        traverse_key_fn!("serialization", gather_schema, $dict, $ctx);
         gather_meta($dict, $ctx)
     }}
 }
@@ -56,7 +56,7 @@ fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCt
                 ctx.recursively_seen_refs.insert(schema_ref_str.to_string());
 
                 gather_schema(definition.downcast_exact::<PyDict>()?, ctx)?;
-                traverse_key_fn!("serialization", gather_serialization, schema_ref_dict, ctx);
+                traverse_key_fn!("serialization", gather_schema, schema_ref_dict, ctx);
                 gather_meta(schema_ref_dict, ctx)?;
 
                 ctx.recursively_seen_refs.remove(schema_ref_str);
@@ -72,10 +72,6 @@ fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCt
     } else {
         py_err!(PyKeyError; "Invalid definition-ref, missing schema_ref")
     }
-}
-
-fn gather_serialization(schema: &Bound<'_, PyDict>, ctx: &mut GatherCtx) -> PyResult<()> {
-    traverse!("schema" => gather_schema, "return_schema" => gather_schema; schema, ctx)
 }
 
 fn gather_meta(schema: &Bound<'_, PyDict>, ctx: &mut GatherCtx) -> PyResult<()> {
