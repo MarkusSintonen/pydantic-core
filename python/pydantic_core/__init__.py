@@ -5,6 +5,7 @@ from typing import Any as _Any
 
 from ._pydantic_core import (
     ArgsKwargs,
+    GatherInvalidDefinitionError,
     MultiHostUrl,
     PydanticCustomError,
     PydanticKnownError,
@@ -63,6 +64,7 @@ __all__ = [
     'PydanticUseDefault',
     'PydanticSerializationError',
     'PydanticSerializationUnexpectedValue',
+    'GatherInvalidDefinitionError',
     'TzInfo',
     'to_json',
     'from_json',
