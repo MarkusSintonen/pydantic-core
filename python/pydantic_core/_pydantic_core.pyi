@@ -1166,6 +1166,10 @@ def validate_core_schema(schema: CoreSchema, *, strict: bool | None = None) -> C
     using pydantic-core directly.
     """
 
-def gather_schemas_for_cleaning(schema: CoreSchema, definitions: dict[str, CoreSchema]) -> GatherResult:
+def gather_schemas_for_cleaning(
+    schema: CoreSchema,
+    definitions: dict[str, CoreSchema],
+    find_meta_with_keys: set[str] | None,
+) -> GatherResult:
     """Used internally for schema cleaning when schemas are generated.
     Gathers information from the schema tree for the cleaning."""
