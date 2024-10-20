@@ -5,8 +5,6 @@ use pyo3::types::{PyDict, PyList, PySet, PyString, PyTuple};
 use pyo3::{intern, Bound, PyResult};
 use std::collections::HashSet;
 
-const CORE_SCHEMA_METADATA_DISCRIMINATOR_PLACEHOLDER_KEY: &str = "pydantic.internal.union_discriminator";
-
 macro_rules! get {
     ($dict: expr, $key: expr) => {
         $dict.get_item(intern!($dict.py(), $key))?
@@ -52,7 +50,7 @@ fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCt
             defaultdict_list_append!(&ctx.def_refs, schema_ref_pystr, schema_ref_dict);
 
             // TODO should py_err! when not found. That error can be used to detect the missing defs in cleaning side
-            if let Some(definition) = ctx.definitions_dict.get_item(schema_ref_pystr)? {
+            if let Some(definition) = ctx.definitions.get_item(schema_ref_pystr)? {
                 ctx.recursively_seen_refs.insert(schema_ref_str.to_string());
 
                 gather_schema(definition.downcast_exact::<PyDict>()?, ctx)?;
@@ -75,11 +73,13 @@ fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCt
 }
 
 fn gather_meta(schema: &Bound<'_, PyDict>, ctx: &mut GatherCtx) -> PyResult<()> {
-    if let Some(meta) = get!(schema, "metadata") {
-        let meta_dict = meta.downcast_exact::<PyDict>()?;
-        if let Some(discriminator) = get!(meta_dict, CORE_SCHEMA_METADATA_DISCRIMINATOR_PLACEHOLDER_KEY) {
-            let schema_discriminator = PyTuple::new_bound(schema.py(), vec![schema.as_any(), &discriminator]);
-            ctx.discriminators.append(schema_discriminator)?;
+    if let Some((res, find_keys)) = &ctx.meta_with_keys {
+        if let Some(meta) = get!(schema, "metadata") {
+            for (k, _) in meta.downcast_exact::<PyDict>()?.iter() {
+                if find_keys.contains(&k)? {
+                    defaultdict_list_append!(res, &k, schema);
+                }
+            }
         }
     }
     Ok(())
@@ -152,32 +152,38 @@ fn gather_schema(schema: &Bound<'_, PyDict>, ctx: &mut GatherCtx) -> PyResult<()
     }
 }
 
-pub struct GatherCtx<'a, 'py> {
-    pub definitions_dict: &'a Bound<'py, PyDict>,
-    pub def_refs: Bound<'py, PyDict>,
-    pub recursive_def_refs: Bound<'py, PySet>,
-    pub discriminators: Bound<'py, PyList>,
+struct GatherCtx<'a, 'py> {
+    definitions: &'a Bound<'py, PyDict>,
+    meta_with_keys: Option<(Bound<'py, PyDict>, &'a Bound<'py, PySet>)>,
+    def_refs: Bound<'py, PyDict>,
+    recursive_def_refs: Bound<'py, PySet>,
     recursively_seen_refs: HashSet<String>,
 }
 
-#[pyfunction(signature = (schema, definitions))]
+#[pyfunction(signature = (schema, definitions, find_meta_with_keys))]
 pub fn gather_schemas_for_cleaning<'py>(
     schema: &Bound<'py, PyAny>,
     definitions: &Bound<'py, PyAny>,
+    find_meta_with_keys: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = schema.py();
+    let meta_with_keys = if find_meta_with_keys.is_none() {
+        None
+    } else {
+        Some((PyDict::new_bound(py), find_meta_with_keys.downcast_exact::<PySet>()?))
+    };
     let mut ctx = GatherCtx {
-        definitions_dict: definitions.downcast_exact()?,
+        definitions: definitions.downcast_exact()?,
+        meta_with_keys,
         def_refs: PyDict::new_bound(py),
         recursive_def_refs: PySet::empty_bound(py)?,
-        discriminators: PyList::empty_bound(py),
         recursively_seen_refs: HashSet::new(),
     };
-    gather_schema(schema.downcast_exact::<PyDict>()?, &mut ctx)?;
+    gather_schema(schema.downcast_exact()?, &mut ctx)?;
 
     let res = PyDict::new_bound(py);
     res.set_item(intern!(py, "definition_refs"), ctx.def_refs)?;
     res.set_item(intern!(py, "recursive_refs"), ctx.recursive_def_refs)?;
-    res.set_item(intern!(py, "deferred_discriminators"), ctx.discriminators)?;
+    res.set_item(intern!(py, "schemas_with_meta_keys"), ctx.meta_with_keys.map(|v| v.0))?;
     Ok(res)
 }

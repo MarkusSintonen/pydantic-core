@@ -146,4 +146,4 @@ class GatherResult(_TypedDict):
 
     definition_refs: dict[str, list[DefinitionReferenceSchema]]
     recursive_refs: set[str]
-    deferred_discriminators: list[tuple[CoreSchema, _Any]]
+    schemas_with_meta_keys: dict[str, list[CoreSchema]] | None
