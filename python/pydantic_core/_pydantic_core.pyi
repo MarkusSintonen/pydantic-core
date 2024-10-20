@@ -28,6 +28,7 @@ __all__ = [
     'PydanticSerializationUnexpectedValue',
     'PydanticUndefined',
     'PydanticUndefinedType',
+    'GatherInvalidDefinitionError',
     'Some',
     'to_json',
     'from_json',
@@ -1165,6 +1166,9 @@ def validate_core_schema(schema: CoreSchema, *, strict: bool | None = None) -> C
     We may also remove this function altogether, do not rely on it being present if you are
     using pydantic-core directly.
     """
+@final
+class GatherInvalidDefinitionError(Exception):
+    """Internal error when encountering invalid definition refs"""
 
 def gather_schemas_for_cleaning(
     schema: CoreSchema,

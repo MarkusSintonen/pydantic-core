@@ -1,9 +1,11 @@
 use crate::tools::py_err;
-use pyo3::exceptions::PyKeyError;
+use pyo3::exceptions::{PyException, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PySet, PyString, PyTuple};
-use pyo3::{intern, Bound, PyResult};
+use pyo3::{create_exception, intern, Bound, PyResult};
 use std::collections::HashSet;
+
+create_exception!(pydantic_core._pydantic_core, GatherInvalidDefinitionError, PyException);
 
 macro_rules! get {
     ($dict: expr, $key: expr) => {
@@ -42,44 +44,47 @@ macro_rules! defaultdict_list_append {
 }
 
 fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCtx) -> PyResult<()> {
-    if let Some(schema_ref) = get!(schema_ref_dict, "schema_ref") {
-        let schema_ref_pystr = schema_ref.downcast_exact::<PyString>()?;
-        let schema_ref_str = schema_ref_pystr.to_str()?;
+    let Some(schema_ref) = get!(schema_ref_dict, "schema_ref") else {
+        return py_err!(PyKeyError; "Invalid definition-ref, missing schema_ref");
+    };
+    let schema_ref_pystr = schema_ref.downcast_exact::<PyString>()?;
+    let schema_ref_str = schema_ref_pystr.to_str()?;
 
-        if !ctx.recursively_seen_refs.contains(schema_ref_str) {
-            defaultdict_list_append!(&ctx.def_refs, schema_ref_pystr, schema_ref_dict);
+    if !ctx.recursively_seen_refs.contains(schema_ref_str) {
+        defaultdict_list_append!(&ctx.def_refs, schema_ref_pystr, schema_ref_dict);
 
-            // TODO should py_err! when not found. That error can be used to detect the missing defs in cleaning side
-            if let Some(definition) = ctx.definitions.get_item(schema_ref_pystr)? {
-                ctx.recursively_seen_refs.insert(schema_ref_str.to_string());
+        let Some(definition) = ctx.definitions.get_item(schema_ref_pystr)? else {
+            return py_err!(GatherInvalidDefinitionError; "Unknown schema_ref: {}", schema_ref_str);
+        };
 
-                gather_schema(definition.downcast_exact::<PyDict>()?, ctx)?;
-                traverse_key_fn!("serialization", gather_schema, schema_ref_dict, ctx);
-                gather_meta(schema_ref_dict, ctx)?;
+        ctx.recursively_seen_refs.insert(schema_ref_str.to_string());
 
-                ctx.recursively_seen_refs.remove(schema_ref_str);
-            }
-        } else {
-            ctx.recursive_def_refs.add(schema_ref_pystr)?;
-            for seen_ref in &ctx.recursively_seen_refs {
-                let seen_ref_pystr = PyString::new_bound(schema_ref.py(), seen_ref);
-                ctx.recursive_def_refs.add(seen_ref_pystr)?;
-            }
-        }
-        Ok(())
+        gather_schema(definition.downcast_exact()?, ctx)?;
+        traverse_key_fn!("serialization", gather_schema, schema_ref_dict, ctx);
+        gather_meta(schema_ref_dict, ctx)?;
+
+        ctx.recursively_seen_refs.remove(schema_ref_str);
     } else {
-        py_err!(PyKeyError; "Invalid definition-ref, missing schema_ref")
+        ctx.recursive_def_refs.add(schema_ref_pystr)?;
+        for seen_ref in &ctx.recursively_seen_refs {
+            let seen_ref_pystr = PyString::new_bound(schema_ref.py(), seen_ref);
+            ctx.recursive_def_refs.add(seen_ref_pystr)?;
+        }
     }
+    Ok(())
 }
 
 fn gather_meta(schema: &Bound<'_, PyDict>, ctx: &mut GatherCtx) -> PyResult<()> {
-    if let Some((res, find_keys)) = &ctx.meta_with_keys {
-        if let Some(meta) = get!(schema, "metadata") {
-            for (k, _) in meta.downcast_exact::<PyDict>()?.iter() {
-                if find_keys.contains(&k)? {
-                    defaultdict_list_append!(res, &k, schema);
-                }
-            }
+    let Some((res, find_keys)) = &ctx.meta_with_keys else {
+        return Ok(());
+    };
+    let Some(meta) = get!(schema, "metadata") else {
+        return Ok(());
+    };
+    let meta_dict = meta.downcast_exact::<PyDict>()?;
+    for k in find_keys.iter() {
+        if meta_dict.contains(&k)? {
+            defaultdict_list_append!(res, &k, schema);
         }
     }
     Ok(())
@@ -120,11 +125,10 @@ fn gather_arguments(arguments: &Bound<'_, PyList>, ctx: &mut GatherCtx) -> PyRes
 // Has 100% coverage in Pydantic side. This is exclusively used there
 #[cfg_attr(has_coverage_attribute, coverage(off))]
 fn gather_schema(schema: &Bound<'_, PyDict>, ctx: &mut GatherCtx) -> PyResult<()> {
-    let type_ = get!(schema, "type");
-    if type_.is_none() {
+    let Some(type_) = get!(schema, "type") else {
         return py_err!(PyKeyError; "Schema type missing");
-    }
-    match type_.unwrap().downcast_exact::<PyString>()?.to_str()? {
+    };
+    match type_.downcast_exact::<PyString>()?.to_str()? {
         "definition-ref" => gather_definition_ref(schema, ctx),
         "definitions" => traverse!("schema" => gather_schema, "definitions" => gather_list; schema, ctx),
         "list" | "set" | "frozenset" | "generator" => traverse!("items_schema" => gather_schema; schema, ctx),
@@ -167,14 +171,12 @@ pub fn gather_schemas_for_cleaning<'py>(
     find_meta_with_keys: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = schema.py();
-    let meta_with_keys = if find_meta_with_keys.is_none() {
-        None
-    } else {
-        Some((PyDict::new_bound(py), find_meta_with_keys.downcast_exact::<PySet>()?))
-    };
     let mut ctx = GatherCtx {
         definitions: definitions.downcast_exact()?,
-        meta_with_keys,
+        meta_with_keys: match find_meta_with_keys.is_none() {
+            true => None,
+            false => Some((PyDict::new_bound(py), find_meta_with_keys.downcast_exact::<PySet>()?)),
+        },
         def_refs: PyDict::new_bound(py),
         recursive_def_refs: PySet::empty_bound(py)?,
         recursively_seen_refs: HashSet::new(),

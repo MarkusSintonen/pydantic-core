@@ -1,4 +1,6 @@
-from pydantic_core import core_schema, gather_schemas_for_cleaning
+import pytest
+
+from pydantic_core import GatherInvalidDefinitionError, core_schema, gather_schemas_for_cleaning
 
 
 def test_no_refs():
@@ -112,3 +114,10 @@ def test_find_meta():
     assert res['schemas_with_meta_keys']['find_meta1'][0] is field1
     assert res['schemas_with_meta_keys']['find_meta1'][1] is field2
     assert res['schemas_with_meta_keys']['find_meta2'][0] is field2
+
+
+def test_unknown_ref():
+    ref1 = core_schema.definition_reference_schema('ref1')
+    schema = core_schema.tuple_schema([core_schema.int_schema(), ref1])
+    with pytest.raises(GatherInvalidDefinitionError, match='Unknown schema_ref: ref1'):
+        gather_schemas_for_cleaning(schema, definitions={}, find_meta_with_keys=None)
