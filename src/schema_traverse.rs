@@ -3,7 +3,6 @@ use pyo3::exceptions::{PyException, PyKeyError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PySet, PyString, PyTuple};
 use pyo3::{create_exception, intern, Bound, PyResult};
-use std::collections::HashSet;
 
 create_exception!(pydantic_core._pydantic_core, GatherInvalidDefinitionError, PyException);
 
@@ -46,27 +45,25 @@ fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCt
     let Some(schema_ref) = get!(schema_ref_dict, "schema_ref") else {
         return py_err!(PyKeyError; "Invalid definition-ref, missing schema_ref");
     };
-    let schema_ref_pystr = schema_ref.downcast_exact::<PyString>()?;
-    let schema_ref_str = schema_ref_pystr.to_str()?;
+    let schema_ref = schema_ref.downcast_exact::<PyString>()?;
 
-    if !ctx.recursively_seen_refs.contains(schema_ref_str) {
-        let Some(definition) = ctx.definitions.get_item(schema_ref_pystr)? else {
-            return py_err!(GatherInvalidDefinitionError; "{}", schema_ref_str);
+    if !ctx.recursively_seen_refs.contains(schema_ref)? {
+        let Some(definition) = ctx.definitions.get_item(schema_ref)? else {
+            return py_err!(GatherInvalidDefinitionError; "{}", schema_ref.to_str()?);
         };
-        defaultdict_list_append!(&ctx.def_refs, schema_ref_pystr, schema_ref_dict);
+        defaultdict_list_append!(&ctx.def_refs, schema_ref, schema_ref_dict);
 
-        ctx.recursively_seen_refs.insert(schema_ref_str.to_string());
+        ctx.recursively_seen_refs.add(schema_ref)?;
 
         gather_schema(definition.downcast_exact()?, ctx)?;
         traverse_key_fn!("serialization", gather_schema, schema_ref_dict, ctx);
         gather_meta(schema_ref_dict, ctx)?;
 
-        ctx.recursively_seen_refs.remove(schema_ref_str);
+        ctx.recursively_seen_refs.discard(schema_ref)?;
     } else {
-        ctx.recursive_def_refs.add(schema_ref_pystr)?;
-        for seen_ref in &ctx.recursively_seen_refs {
-            let seen_ref_pystr = PyString::new_bound(schema_ref.py(), seen_ref);
-            ctx.recursive_def_refs.add(seen_ref_pystr)?;
+        ctx.recursive_def_refs.add(schema_ref)?;
+        for seen_ref in ctx.recursively_seen_refs.iter() {
+            ctx.recursive_def_refs.add(seen_ref)?;
         }
     }
     Ok(())
@@ -159,7 +156,7 @@ struct GatherCtx<'a, 'py> {
     meta_with_keys: Option<(Bound<'py, PyDict>, &'a Bound<'py, PySet>)>,
     def_refs: Bound<'py, PyDict>,
     recursive_def_refs: Bound<'py, PySet>,
-    recursively_seen_refs: HashSet<String>,
+    recursively_seen_refs: Bound<'py, PySet>,
 }
 
 #[pyfunction(signature = (schema, definitions, find_meta_with_keys))]
@@ -177,7 +174,7 @@ pub fn gather_schemas_for_cleaning<'py>(
         },
         def_refs: PyDict::new_bound(py),
         recursive_def_refs: PySet::empty_bound(py)?,
-        recursively_seen_refs: HashSet::new(),
+        recursively_seen_refs: PySet::empty_bound(py)?,
     };
     gather_schema(schema.downcast_exact()?, &mut ctx)?;
 
