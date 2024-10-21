@@ -33,8 +33,7 @@ macro_rules! defaultdict_list_append {
     ($dict: expr, $key: expr, $value: expr) => {{
         match $dict.get_item($key)? {
             None => {
-                let list = PyList::empty_bound($dict.py());
-                list.append($value)?;
+                let list = PyList::new_bound($dict.py(), [$value]);
                 $dict.set_item($key, list)?;
             }
             // Safety: we know that the value is a PyList as we just created it above
@@ -51,11 +50,10 @@ fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCt
     let schema_ref_str = schema_ref_pystr.to_str()?;
 
     if !ctx.recursively_seen_refs.contains(schema_ref_str) {
-        defaultdict_list_append!(&ctx.def_refs, schema_ref_pystr, schema_ref_dict);
-
         let Some(definition) = ctx.definitions.get_item(schema_ref_pystr)? else {
-            return py_err!(GatherInvalidDefinitionError; "Unknown schema_ref: {}", schema_ref_str);
+            return py_err!(GatherInvalidDefinitionError; "{}", schema_ref_str);
         };
+        defaultdict_list_append!(&ctx.def_refs, schema_ref_pystr, schema_ref_dict);
 
         ctx.recursively_seen_refs.insert(schema_ref_str.to_string());
 

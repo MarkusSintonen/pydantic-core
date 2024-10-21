@@ -119,5 +119,5 @@ def test_find_meta():
 def test_unknown_ref():
     ref1 = core_schema.definition_reference_schema('ref1')
     schema = core_schema.tuple_schema([core_schema.int_schema(), ref1])
-    with pytest.raises(GatherInvalidDefinitionError, match='Unknown schema_ref: ref1'):
+    with pytest.raises(GatherInvalidDefinitionError, match='ref1'):
         gather_schemas_for_cleaning(schema, definitions={}, find_meta_with_keys=None)
