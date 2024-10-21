@@ -121,3 +121,22 @@ def test_unknown_ref():
     schema = core_schema.tuple_schema([core_schema.int_schema(), ref1])
     with pytest.raises(GatherInvalidDefinitionError, match='ref1'):
         gather_schemas_for_cleaning(schema, definitions={}, find_meta_with_keys=None)
+
+
+def test_no_duplicate_ref_instances_gathered():
+    schema1 = core_schema.tuple_schema([core_schema.str_schema(), core_schema.int_schema()])
+    schema2 = core_schema.tuple_schema(
+        [core_schema.definition_reference_schema('ref1'), core_schema.definition_reference_schema('ref1')]
+    )
+    schema3 = core_schema.tuple_schema(
+        [core_schema.definition_reference_schema('ref2'), core_schema.definition_reference_schema('ref2')]
+    )
+    definitions = {'ref1': schema1, 'ref2': schema2}
+
+    res = gather_schemas_for_cleaning(schema3, definitions=definitions, find_meta_with_keys=None)
+    assert res['definition_refs'] == {
+        'ref1': [schema2['items_schema'][0], schema2['items_schema'][1]],
+        'ref2': [schema3['items_schema'][0], schema3['items_schema'][1]],
+    }
+    assert res['recursive_refs'] == set()
+    assert res['schemas_with_meta_keys'] is None
