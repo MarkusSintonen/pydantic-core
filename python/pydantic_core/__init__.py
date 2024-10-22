@@ -146,6 +146,6 @@ class MultiHostHost(_TypedDict):
 class GatherResult(_TypedDict):
     """Internal result of gathering schemas for cleaning."""
 
-    definition_refs: dict[str, list[DefinitionReferenceSchema]]
+    inlinable_def_refs: dict[str, DefinitionReferenceSchema]
     recursive_refs: set[str]
     schemas_with_meta_keys: dict[str, list[CoreSchema]] | None

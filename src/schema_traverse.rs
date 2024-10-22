@@ -1,11 +1,16 @@
 use crate::tools::py_err;
 use pyo3::exceptions::{PyException, PyKeyError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PySet, PyString, PyTuple};
+use pyo3::types::{PyDict, PyList, PyNone, PySet, PyString, PyTuple};
 use pyo3::{create_exception, intern, Bound, PyResult};
-use std::collections::HashSet;
 
 create_exception!(pydantic_core._pydantic_core, GatherInvalidDefinitionError, PyException);
+
+macro_rules! none {
+    ($py: expr) => {
+        PyNone::get_bound($py)
+    };
+}
 
 macro_rules! get {
     ($dict: expr, $key: expr) => {
@@ -47,17 +52,17 @@ fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCt
         return py_err!(PyKeyError; "Invalid definition-ref, missing schema_ref");
     };
     let schema_ref = schema_ref.downcast_exact::<PyString>()?;
+    let py = schema_ref_dict.py();
 
     if !ctx.recursively_seen_refs.contains(schema_ref)? {
-        // Check if we already gathered this definition ref instance.
-        // No need to again process the same def ref instance if we already did it.
-        if ctx.seen_ref_instances.insert(schema_ref_dict.as_ptr() as isize) {
+        // Def ref in no longer consider as inlinable if its re-encountered. Then its used multiple times.
+        // No need to retraverse it either if we already encountered this.
+        if !ctx.inline_def_ref_candidates.contains(schema_ref)? {
             let Some(definition) = ctx.definitions.get_item(schema_ref)? else {
                 return py_err!(GatherInvalidDefinitionError; "{}", schema_ref.to_str()?);
             };
 
-            defaultdict_list_append!(&ctx.def_refs, schema_ref, schema_ref_dict);
-
+            ctx.inline_def_ref_candidates.set_item(schema_ref, schema_ref_dict)?;
             ctx.recursively_seen_refs.add(schema_ref)?;
 
             gather_schema(definition.downcast_exact()?, ctx)?;
@@ -65,10 +70,14 @@ fn gather_definition_ref(schema_ref_dict: &Bound<'_, PyDict>, ctx: &mut GatherCt
             gather_meta(schema_ref_dict, ctx)?;
 
             ctx.recursively_seen_refs.discard(schema_ref)?;
+        } else {
+            ctx.inline_def_ref_candidates.set_item(schema_ref, none!(py))?; // Mark not inlinable (used multiple times)
         }
     } else {
+        ctx.inline_def_ref_candidates.set_item(schema_ref, none!(py))?; // Mark not inlinable (used in recursion)
         ctx.recursive_def_refs.add(schema_ref)?;
         for seen_ref in ctx.recursively_seen_refs.iter() {
+            ctx.inline_def_ref_candidates.set_item(&seen_ref, none!(py))?; // Mark not inlinable (used in recursion)
             ctx.recursive_def_refs.add(seen_ref)?;
         }
     }
@@ -160,10 +169,9 @@ fn gather_schema(schema: &Bound<'_, PyDict>, ctx: &mut GatherCtx) -> PyResult<()
 struct GatherCtx<'a, 'py> {
     definitions: &'a Bound<'py, PyDict>,
     meta_with_keys: Option<(Bound<'py, PyDict>, &'a Bound<'py, PySet>)>,
-    def_refs: Bound<'py, PyDict>,
+    inline_def_ref_candidates: Bound<'py, PyDict>,
     recursive_def_refs: Bound<'py, PySet>,
     recursively_seen_refs: Bound<'py, PySet>,
-    seen_ref_instances: HashSet<isize>,
 }
 
 #[pyfunction(signature = (schema, definitions, find_meta_with_keys))]
@@ -179,15 +187,21 @@ pub fn gather_schemas_for_cleaning<'py>(
             true => None,
             false => Some((PyDict::new_bound(py), find_meta_with_keys.downcast_exact::<PySet>()?)),
         },
-        def_refs: PyDict::new_bound(py),
+        inline_def_ref_candidates: PyDict::new_bound(py),
         recursive_def_refs: PySet::empty_bound(py)?,
         recursively_seen_refs: PySet::empty_bound(py)?,
-        seen_ref_instances: HashSet::new(),
     };
     gather_schema(schema.downcast_exact()?, &mut ctx)?;
 
+    let inlinable_def_refs = PyDict::new_bound(py);
+    for (ref_str, def_ref_candidate) in ctx.inline_def_ref_candidates.iter() {
+        if !def_ref_candidate.is_none() {
+            inlinable_def_refs.set_item(ref_str, def_ref_candidate)?;
+        }
+    }
+
     let res = PyDict::new_bound(py);
-    res.set_item(intern!(py, "definition_refs"), ctx.def_refs)?;
+    res.set_item(intern!(py, "inlinable_def_refs"), inlinable_def_refs)?;
     res.set_item(intern!(py, "recursive_refs"), ctx.recursive_def_refs)?;
     res.set_item(intern!(py, "schemas_with_meta_keys"), ctx.meta_with_keys.map(|v| v.0))?;
     Ok(res)

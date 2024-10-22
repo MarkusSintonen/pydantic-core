@@ -8,7 +8,7 @@ def test_no_refs():
     p2 = core_schema.arguments_parameter('b', core_schema.int_schema())
     schema = core_schema.arguments_schema([p1, p2])
     res = gather_schemas_for_cleaning(schema, definitions={}, find_meta_with_keys=None)
-    assert res['definition_refs'] == {}
+    assert res['inlinable_def_refs'] == {}
     assert res['recursive_refs'] == set()
     assert res['schemas_with_meta_keys'] is None
 
@@ -18,12 +18,12 @@ def test_simple_ref_schema():
     definitions = {'ref1': core_schema.int_schema(ref='ref1')}
 
     res = gather_schemas_for_cleaning(schema, definitions, find_meta_with_keys=None)
-    assert res['definition_refs'] == {'ref1': [schema]} and res['definition_refs']['ref1'][0] is schema
+    assert res['inlinable_def_refs'] == {'ref1': schema} and res['inlinable_def_refs']['ref1'] is schema
     assert res['recursive_refs'] == set()
     assert res['schemas_with_meta_keys'] is None
 
 
-def test_deep_ref_schema():
+def test_deep_ref_schema_used_multiple_times():
     class Model:
         pass
 
@@ -42,9 +42,7 @@ def test_deep_ref_schema():
     definitions = {'ref1': core_schema.str_schema(ref='ref1'), 'ref2': core_schema.bytes_schema(ref='ref2')}
 
     res = gather_schemas_for_cleaning(schema, definitions, find_meta_with_keys=None)
-    assert res['definition_refs'] == {'ref1': [ref11, ref12], 'ref2': [ref2]}
-    assert res['definition_refs']['ref1'][0] is ref11 and res['definition_refs']['ref1'][1] is ref12
-    assert res['definition_refs']['ref2'][0] is ref2
+    assert res['inlinable_def_refs'] == {'ref2': ref2} and res['inlinable_def_refs']['ref2'] is ref2
     assert res['recursive_refs'] == set()
     assert res['schemas_with_meta_keys'] is None
 
@@ -55,7 +53,7 @@ def test_ref_in_serialization_schema():
         serialization=core_schema.plain_serializer_function_ser_schema(lambda v: v, return_schema=ref),
     )
     res = gather_schemas_for_cleaning(schema, definitions={'ref1': core_schema.str_schema()}, find_meta_with_keys=None)
-    assert res['definition_refs'] == {'ref1': [ref]} and res['definition_refs']['ref1'][0] is ref
+    assert res['inlinable_def_refs'] == {'ref1': ref} and res['inlinable_def_refs']['ref1'] is ref
     assert res['recursive_refs'] == set()
     assert res['schemas_with_meta_keys'] is None
 
@@ -63,7 +61,7 @@ def test_ref_in_serialization_schema():
 def test_recursive_ref_schema():
     ref1 = core_schema.definition_reference_schema('ref1')
     res = gather_schemas_for_cleaning(ref1, definitions={'ref1': ref1}, find_meta_with_keys=None)
-    assert res['definition_refs'] == {'ref1': [ref1]} and res['definition_refs']['ref1'][0] is ref1
+    assert res['inlinable_def_refs'] == {}
     assert res['recursive_refs'] == {'ref1'}
     assert res['schemas_with_meta_keys'] is None
 
@@ -82,11 +80,8 @@ def test_deep_recursive_ref_schema():
         },
         find_meta_with_keys=None,
     )
-    assert res['definition_refs'] == {'ref1': [ref1], 'ref2': [ref2], 'ref3': [ref3]}
+    assert res['inlinable_def_refs'] == {}
     assert res['recursive_refs'] == {'ref1', 'ref2', 'ref3'}
-    assert res['definition_refs']['ref1'][0] is ref1
-    assert res['definition_refs']['ref2'][0] is ref2
-    assert res['definition_refs']['ref3'][0] is ref3
     assert res['schemas_with_meta_keys'] is None
 
 
@@ -108,7 +103,7 @@ def test_find_meta():
     res = gather_schemas_for_cleaning(
         schema, definitions={'ref1': field2}, find_meta_with_keys={'find_meta1', 'find_meta2'}
     )
-    assert res['definition_refs'] == {'ref1': [ref1]} and res['definition_refs']['ref1'][0] is ref1
+    assert res['inlinable_def_refs'] == {'ref1': ref1} and res['inlinable_def_refs']['ref1'] is ref1
     assert res['recursive_refs'] == set()
     assert res['schemas_with_meta_keys'] == {'find_meta1': [field1, field2], 'find_meta2': [field2]}
     assert res['schemas_with_meta_keys']['find_meta1'][0] is field1
@@ -134,9 +129,6 @@ def test_no_duplicate_ref_instances_gathered():
     definitions = {'ref1': schema1, 'ref2': schema2}
 
     res = gather_schemas_for_cleaning(schema3, definitions=definitions, find_meta_with_keys=None)
-    assert res['definition_refs'] == {
-        'ref1': [schema2['items_schema'][0], schema2['items_schema'][1]],
-        'ref2': [schema3['items_schema'][0], schema3['items_schema'][1]],
-    }
+    assert res['inlinable_def_refs'] == {}
     assert res['recursive_refs'] == set()
     assert res['schemas_with_meta_keys'] is None
