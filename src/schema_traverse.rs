@@ -193,15 +193,8 @@ pub fn gather_schemas_for_cleaning<'py>(
     };
     gather_schema(schema.downcast_exact()?, &mut ctx)?;
 
-    let inlinable_def_refs = PyDict::new_bound(py);
-    for (ref_str, def_ref_candidate) in ctx.inline_def_ref_candidates.iter() {
-        if !def_ref_candidate.is_none() {
-            inlinable_def_refs.set_item(ref_str, def_ref_candidate)?;
-        }
-    }
-
     let res = PyDict::new_bound(py);
-    res.set_item(intern!(py, "inlinable_def_refs"), inlinable_def_refs)?;
+    res.set_item(intern!(py, "inlinable_def_refs"), ctx.inline_def_ref_candidates)?;
     res.set_item(intern!(py, "recursive_refs"), ctx.recursive_def_refs)?;
     res.set_item(intern!(py, "schemas_with_meta_keys"), ctx.meta_with_keys.map(|v| v.0))?;
     Ok(res)

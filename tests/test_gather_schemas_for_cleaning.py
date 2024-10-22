@@ -42,7 +42,7 @@ def test_deep_ref_schema_used_multiple_times():
     definitions = {'ref1': core_schema.str_schema(ref='ref1'), 'ref2': core_schema.bytes_schema(ref='ref2')}
 
     res = gather_schemas_for_cleaning(schema, definitions, find_meta_with_keys=None)
-    assert res['inlinable_def_refs'] == {'ref2': ref2} and res['inlinable_def_refs']['ref2'] is ref2
+    assert res['inlinable_def_refs'] == {'ref1': None, 'ref2': ref2} and res['inlinable_def_refs']['ref2'] is ref2
     assert res['recursive_refs'] == set()
     assert res['schemas_with_meta_keys'] is None
 
@@ -61,7 +61,7 @@ def test_ref_in_serialization_schema():
 def test_recursive_ref_schema():
     ref1 = core_schema.definition_reference_schema('ref1')
     res = gather_schemas_for_cleaning(ref1, definitions={'ref1': ref1}, find_meta_with_keys=None)
-    assert res['inlinable_def_refs'] == {}
+    assert res['inlinable_def_refs'] == {'ref1': None}
     assert res['recursive_refs'] == {'ref1'}
     assert res['schemas_with_meta_keys'] is None
 
@@ -80,7 +80,7 @@ def test_deep_recursive_ref_schema():
         },
         find_meta_with_keys=None,
     )
-    assert res['inlinable_def_refs'] == {}
+    assert res['inlinable_def_refs'] == {'ref1': None, 'ref2': None, 'ref3': None}
     assert res['recursive_refs'] == {'ref1', 'ref2', 'ref3'}
     assert res['schemas_with_meta_keys'] is None
 
@@ -129,6 +129,6 @@ def test_no_duplicate_ref_instances_gathered():
     definitions = {'ref1': schema1, 'ref2': schema2}
 
     res = gather_schemas_for_cleaning(schema3, definitions=definitions, find_meta_with_keys=None)
-    assert res['inlinable_def_refs'] == {}
+    assert res['inlinable_def_refs'] == {'ref1': None, 'ref2': None}
     assert res['recursive_refs'] == set()
     assert res['schemas_with_meta_keys'] is None
