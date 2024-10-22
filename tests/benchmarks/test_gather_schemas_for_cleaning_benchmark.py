@@ -1,6 +1,6 @@
 from typing import Callable
 
-from python.pydantic_core import gather_schemas_for_cleaning
+from pydantic_core import gather_schemas_for_cleaning
 
 from .nested_schema import inlined_schema, schema_using_defs
 
